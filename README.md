@@ -1,17 +1,18 @@
 # Kontext
 
-Quickly set a kubernetes context.
+Quickly set a Kubernetes context.
 
+[kubectl](https://kubernetes.io/fr/docs/reference/kubectl/) must be installed.
 
-kubectl must be installed.
+Kontext is POSIX compliant.
 
 ## Usage
-Using as a simple script
+
+### Using as a simple script
 ```
 ./kontext.sh
 ```
-
-Installing on the current user
+### Installing on the current user
 ```
 file="/home/$USER/.kube/kontext.sh" \
 && curl https://raw.githubusercontent.com/ggtrd/kontext/refs/heads/main/kontext.sh -o $file \
@@ -21,3 +22,5 @@ file="/home/$USER/.kube/kontext.sh" \
 ```
 kontext
 ```
+# License
+This project is licensed under the MIT License. See the [LICENSE](https://github.com/ggtrd/kontext/blob/main/LICENSE.md) file for details.
