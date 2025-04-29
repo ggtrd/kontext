@@ -1,4 +1,5 @@
-#!/bin/bash
+#!/bin/sh
+
 
 
 
@@ -30,60 +31,107 @@
 # Menu selectable with keyboard arrows
 # Usage: menu <description> <selected choice> <list of choice>
 menu() {
-    local prompt="$1"
-    local outvar="$2"
+    prompt="$1"
+    outvar="$2"
     shift
     shift
 
-    local options=("$@") cur=0 count=${#options[@]} index=0
-    local esc=$(echo -en "\e") # cache ESC as test doesn't allow esc codes
+    options="$@"
+    options="$options exit" # Add "exit" as an option
+    cur=0
+    count=$(set -- $options; echo $#) # Count options
+    index=0
+    esc=$(printf "\033")             # Cache ESC as printf is POSIX-compliant
 
-    echo $prompt
+    # Handle CTRL-C (SIGINT)
+    cleanup() {
+        printf "\nMenu canceled by user.\n"
+        stty sane # Restore terminal settings
+        exit 1
+    }
+    trap cleanup INT
+
+    echo "$prompt"
 
     while true; do
         # list all options (option list is zero-based)
         index=0
-        for o in "${options[@]}"; do
-            if [ "$index" == "$cur" ]; then
-                echo -e " >\e[7m$o\e[0m" # mark & highlight the current option
+        for o in $options; do
+            if [ "$index" = "$cur" ]; then
+                if [ "$o" = "exit" ]; then
+                    # Highlight "exit" in red background and inverted text when selected
+                    printf " >\033[41;7m%s\033[0m\n" "$o"
+                else
+                    # Highlight current selection with inverted text
+                    printf " >\033[7m%s\033[0m\n" "$o"
+                fi
             else
-                echo "  $o"
+                if [ "$o" = "exit" ]; then
+                    # Display "exit" in red background when not selected
+                    printf "  \033[41m%s\033[0m\n" "$o"
+                else
+                    # Display normal text for other options
+                    echo "  $o"
+                fi
             fi
-            ((index++))
+            index=$((index + 1))
         done
-        read -s -n3 key               # wait for user to key in arrows or ENTER
-        if [[ $key == $esc[A ]]; then # up arrow
-            ((cur--))
-            ((cur < 0)) && ((cur = 0))
-        elif [[ $key == $esc[B ]]; then # down arrow
-            ((cur++))
-            ((cur >= count)) && ((cur = count - 1))
-        elif [[ $key == "" ]]; then # nothing, i.e the read delimiter - ENTER
-            break
+
+        # Wait for user input
+        key=""
+        read_key() {
+            # Read single keypress or sequence
+            old_stty=$(stty -g) # Save current terminal settings
+            stty raw -echo      # Set terminal to raw mode
+            key=$(dd bs=1 count=1 2>/dev/null) # Read a single character
+            stty "$old_stty"    # Restore terminal settings
+        }
+
+        read_key
+
+        if [ "$key" = "$esc" ]; then
+            # Handle arrow keys (multi-character sequences)
+            read_key
+            if [ "$key" = "[" ]; then
+                read_key
+                if [ "$key" = "A" ]; then # up arrow
+                    cur=$((cur - 1))
+                    [ "$cur" -lt 0 ] && cur=0
+                elif [ "$key" = "B" ]; then # down arrow
+                    cur=$((cur + 1))
+                    [ "$cur" -ge "$count" ] && cur=$((count - 1))
+                fi
+            fi
+        elif [ "$key" = "" ] || [ "$key" = "$(printf '\r')" ]; then # ENTER
+            if [ "$cur" -eq $((count - 1)) ]; then
+                # If "exit" is selected, exit the menu
+                cleanup
+            else
+                break
+            fi
         fi
-        echo -en "\e[${count}A" # go up to the beginning to re-render
+        printf "\033[%sA" "$count" # go up to the beginning to re-render
     done
-    # export the selection to the requested output variable
-    printf -v $outvar "${options[$cur]}"
+
+    # Export the selection to the requested output variable
+    eval "$outvar=\$(echo $options | cut -d' ' -f$((cur + 1)))"
+
+    # Reset the trap for SIGINT
+    trap - INT
 }
 
 
 
 
-
-# Create kubernetes context selectionnable menu
-contexts="$(kubectl config get-contexts -o name)"
-
-i=0
-for context in $contexts; do
-    selections[$i]=$context
-    i=$(($i + 1))
-done
-menu "Contexts list:" selected_choice "${selections[@]}"
+# Create kubernetes context selectable menu
+contexts=$(kubectl config get-contexts -o name)
+menu "Contexts list:" selected_choice $contexts
 
 
-# Set kurbernetes context from selected list
-kubectl config use-context $selected_choice
+
+
+# Set Kubernetes context from selected list
+kubectl config use-context "$selected_choice"
 
 
 
