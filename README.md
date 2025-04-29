@@ -15,7 +15,7 @@ Installing on the current user
 ```
 file="/home/$USER/.kube/kontext.sh" \
 && curl https://raw.githubusercontent.com/ggtrd/kontext/refs/heads/main/kontext.sh -o $file \
-&& chmod +x $ \
+&& chmod +x $file \
 && echo "alias kontext='$file'" >> /home/$USER/.bashrc
 ```
 ```
