@@ -72,8 +72,10 @@ menu() {
 
 
 # Create kubernetes context selectionnable menu
+contexts="$(kubectl config get-contexts -o name)"
+
 i=0
-for context in "$(kubectl config get-contexts -o name)"; do
+for context in $contexts; do
     selections[$i]=$context
     i=$(($i + 1))
 done
