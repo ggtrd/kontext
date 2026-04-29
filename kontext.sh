@@ -1,8 +1,5 @@
 #!/bin/sh
 
-
-
-
 # MIT License
 
 # Copyright (c) 2025 Geoffrey Gontard
@@ -26,114 +23,143 @@
 # SOFTWARE.
 
 
+# Keyboard keys
+ARROW_UP="$(printf '\033[A')"
+ARROW_DOWN="$(printf '\033[B')"
 
 
-# Menu selectable with keyboard arrows
-# Usage: menu <description> <selected choice> <list of choice>
+# Create selectable menu list
+# Usage: menu "item1 item2 item3 etc..."
 menu() {
-    prompt="$1"
-    outvar="$2"
-    shift
-    shift
+    option_exit="exit"
+    options="$1 $option_exit"
+    current=1
+    total="$(echo $options | wc -w)"
 
-    options="$@"
-    options="$options exit" # Add "exit" as an option
-    cur=0
-    count=$(set -- $options; echo $#) # Count options
-    index=0
-    esc=$(printf "\033")             # Cache ESC as printf is POSIX-compliant
+    # Print menu with selectables options
+    # Usage: print_menu
+    print_menu() {
+        local NO_FORMAT='\033[0m'
+        local BG_EXIT='\033[48;5;203m'
+        local FG_EXIT='\033[38;5;232m'
+        local BG_EXIT_SELECTED='\033[48;5;160m'
+        local BG_SELECTED='\033[48;5;63m'
+        local FG_SELECTED='\033[38;5;15m'
 
-    # Handle CTRL-C (SIGINT)
-    cleanup() {
-        printf "\nMenu canceled by user.\n"
-        stty sane # Restore terminal settings
-        exit 1
-    }
-    trap cleanup INT
-
-    echo "$prompt"
-
-    while true; do
-        # list all options (option list is zero-based)
-        index=0
-        for o in $options; do
-            if [ "$index" = "$cur" ]; then
-                if [ "$o" = "exit" ]; then
-                    # Highlight "exit" in red background and inverted text when selected
-                    printf " >\033[41;7m%s\033[0m\n" "$o"
+        i=1
+        for option in $options; do
+            if [ "$option" = "$option_exit" ]; then
+                if [ "$i" -eq "$current" ]; then
+                    printf " > $BG_EXIT_SELECTED$FG_SELECTED %s $NO_FORMAT\n" "$option"
                 else
-                    # Highlight current selection with inverted text
-                    printf " >\033[7m%s\033[0m\n" "$o"
+                    printf "   $BG_EXIT$FG_EXIT %s $NO_FORMAT\n" "$option"
                 fi
             else
-                if [ "$o" = "exit" ]; then
-                    # Display "exit" in red background when not selected
-                    printf "  \033[41m%s\033[0m\n" "$o"
+                if [ "$i" -eq "$current" ]; then
+                    printf " > $BG_SELECTED$FG_SELECTED %s $NO_FORMAT\n" "$option"
                 else
-                    # Display normal text for other options
-                    echo "  $o"
+                    printf "   $BG_RED$FG_BLACK %s $NO_FORMAT\n" "$option"
                 fi
             fi
-            index=$((index + 1))
+            i=$((i + 1))
         done
+    }
 
-        # Wait for user input
-        key=""
-        read_key() {
-            # Read single keypress or sequence
-            old_stty=$(stty -g) # Save current terminal settings
-            stty raw -echo      # Set terminal to raw mode
-            key=$(dd bs=1 count=1 2>/dev/null) # Read a single character
-            stty "$old_stty"    # Restore terminal settings
-        }
+    # Display a first time the menu
+    print_menu
 
-        read_key
+    # Ensure terminal is in right mode
+    stty -echo -icanon
 
-        if [ "$key" = "$esc" ]; then
-            # Handle arrow keys (multi-character sequences)
-            read_key
-            if [ "$key" = "[" ]; then
-                read_key
-                if [ "$key" = "A" ]; then # up arrow
-                    cur=$((cur - 1))
-                    [ "$cur" -lt 0 ] && cur=0
-                elif [ "$key" = "B" ]; then # down arrow
-                    cur=$((cur + 1))
-                    [ "$cur" -ge "$count" ] && cur=$((count - 1))
-                fi
-            fi
-        elif [ "$key" = "" ] || [ "$key" = "$(printf '\r')" ]; then # ENTER
-            if [ "$cur" -eq $((count - 1)) ]; then
-                # If "exit" is selected, exit the menu
-                cleanup
-            else
-                break
-            fi
-        fi
-        printf "\033[%sA" "$count" # go up to the beginning to re-render
+    # Enable CTRL+C
+    trap 'stty echo icanon; printf "\033[?25h"; exit' INT TERM EXIT
+
+    # Hide terminal cursor
+    printf "\033[?25l"
+
+    # Start the program
+    while true; do
+        # Read keyboards entries
+        key="$(dd bs=3 count=1 2>/dev/null)"
+        case "$key" in
+            "$ARROW_UP")    [ "$current" -gt 1 ] && current=$((current - 1)) ;;
+            "$ARROW_DOWN")  [ "$current" -lt "$total" ] && current=$((current + 1)) ;;
+            "")             break ;;
+        esac
+
+        # Ensure the list is well-displayed in good shape
+        printf "\033[%dA" "$total"
+        print_menu
     done
 
-    # Export the selection to the requested output variable
-    eval "$outvar=\$(echo $options | cut -d' ' -f$((cur + 1)))"
+    # Restore terminal
+    stty echo icanon
 
-    # Reset the trap for SIGINT
-    trap - INT
+    # Enable back terminal cursor
+    printf "\033[?25h"
+
+    SELECTED_CHOICE="$(echo $options | cut -d ' ' -f $current)"
+    if [ "$SELECTED_CHOICE" = "$option_exit" ]; then
+        echo "exited"
+        exit
+    else
+        echo "selected: $SELECTED_CHOICE"
+    fi
 }
 
 
+# List contexts by looking for the right kubeconfig to use
+# Usage: get_contexts
+get_contexts() {
+    # Check if yq is available, or use kubectl is not
+    # using yq allows to reduce time by reading kubeconfig file directly and avoid fetching contexts from kubectl
+    if [ "$(command -v yq)" ]; then
+        # Try to get kubeconfig from arguments (file path)
+        if [ -f "$1" ]; then
+            contexts="$(cat $1 | yq .contexts[].name)"
+
+        # Try to get kubeconfig from env var $KUBECONFIG
+        elif [ -f "$KUBECONFIG" ]; then
+            contexts="$(cat $KUBECONFIG | yq .contexts[].name)"
+
+        # Try to get kubeconfig from $HOME/.kube/config
+        elif [ -f "$HOME/.kube/config" ]; then
+            contexts="$(cat $HOME/.kube/config | yq .contexts[].name)"
+        fi
+
+    # Fallback on kubectl
+    else
+        contexts="$(kubectl config get-contexts -o name)"
+    fi
+
+    echo $contexts
+}
 
 
-# Create kubernetes context selectable menu
-contexts=$(kubectl config get-contexts -o name)
-menu "Contexts list:" selected_choice $contexts
+# Offers differents options from args
+case "$1" in
+  -h|--help|help)
+    echo ''
+    echo " Quickly select Kubernetes context"
+    echo " usages:"
+    echo "  $0                                       Select kube contexts from default kubeconfig file"
+    echo "  $0 -f, --file <kubeconfig_file_path>     Select kube contexts from given kubeconfig file"
+    echo "  $0 -h, --help                            Display this message"
+    echo ''
+    ;;
 
+  -f|--file|file)
+    contexts="$(get_contexts $2)"
+    menu "$(echo $contexts)"
+    kubectl config use-context "$SELECTED_CHOICE"
+    ;;
 
-
-
-# Set Kubernetes context from selected list
-kubectl config use-context "$selected_choice"
-
-
+  *)
+    contexts="$(get_contexts)"
+    menu "$(echo $contexts)"
+    kubectl config use-context "$SELECTED_CHOICE"
+    ;;
+esac
 
 
 exit
