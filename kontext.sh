@@ -23,22 +23,22 @@
 # SOFTWARE.
 
 
-# Keyboard keys
-ARROW_UP="$(printf '\033[A')"
-ARROW_DOWN="$(printf '\033[B')"
-
-
 # Create selectable menu list
 # Usage: menu "item1 item2 item3 etc..."
 menu() {
-    option_exit="exit"
-    options="$1 $option_exit"
-    current=1
-    total="$(echo $options | wc -w)"
+    local option_exit="exit"
+    local options="$1 $option_exit"
+    local current=1
+    local total="$(echo $options | wc -w)"
+
+    # Keyboard keys
+    local ARROW_UP="$(printf '\033[A')"
+    local ARROW_DOWN="$(printf '\033[B')"
 
     # Print menu with selectables options
     # Usage: print_menu
     print_menu() {
+        # Colors
         local NO_FORMAT='\033[0m'
         local BG_EXIT='\033[48;5;203m'
         local FG_EXIT='\033[38;5;232m'
@@ -80,7 +80,7 @@ menu() {
     # Start the program
     while true; do
         # Read keyboards entries
-        key="$(dd bs=3 count=1 2>/dev/null)"
+        local key="$(dd bs=3 count=1 2>/dev/null)"
         case "$key" in
             "$ARROW_UP")    [ "$current" -gt 1 ] && current=$((current - 1)) ;;
             "$ARROW_DOWN")  [ "$current" -lt "$total" ] && current=$((current + 1)) ;;
@@ -111,21 +111,23 @@ menu() {
 # List contexts by looking for the right kubeconfig to use
 # Usage: get_contexts
 get_contexts() {
-    # Check if yq is available, or use kubectl is not
-    # using yq allows to reduce time by reading kubeconfig file directly and avoid fetching contexts from kubectl
-    if [ "$(command -v yq)" ]; then
-        # Try to get kubeconfig from arguments (file path)
-        if [ -f "$1" ]; then
-            contexts="$(cat $1 | yq .contexts[].name)"
 
-        # Try to get kubeconfig from env var $KUBECONFIG
-        elif [ -f "$KUBECONFIG" ]; then
-            contexts="$(cat $KUBECONFIG | yq .contexts[].name)"
+    # Extract contexts names from a kubeconfig yaml file
+    get_contexts_from_kubeconfig() {
+        cat "$1" | grep -A99 contexts: | grep -B99 context: | grep 'name:' | sed 's|.*:||' | sed 's| ||'
+    }
 
-        # Try to get kubeconfig from $HOME/.kube/config
-        elif [ -f "$HOME/.kube/config" ]; then
-            contexts="$(cat $HOME/.kube/config | yq .contexts[].name)"
-        fi
+    # Try to get kubeconfig from arguments (file path)
+    if [ -f "$1" ]; then
+        contexts="$(get_contexts_from_kubeconfig $1)"
+
+    # Try to get kubeconfig from env var $KUBECONFIG
+    elif [ -f "$KUBECONFIG" ]; then
+        contexts="$(get_contexts_from_kubeconfig $KUBECONFIG)"
+
+    # Try to get kubeconfig from $HOME/.kube/config
+    elif [ -f "$HOME/.kube/config" ]; then
+        contexts="$(get_contexts_from_kubeconfig $HOME/.kube/config)"
 
     # Fallback on kubectl
     else
@@ -133,6 +135,10 @@ get_contexts() {
     fi
 
     echo $contexts
+}
+
+use_context() {
+    kubectl config use-context "$SELECTED_CHOICE"
 }
 
 
@@ -143,6 +149,7 @@ case "$1" in
     echo " Quickly select Kubernetes context"
     echo " usages:"
     echo "  $0                                       Select kube contexts from default kubeconfig file"
+    echo "  $0 <kubeconfig_file_path>                Same as -f, --file"
     echo "  $0 -f, --file <kubeconfig_file_path>     Select kube contexts from given kubeconfig file"
     echo "  $0 -h, --help                            Display this message"
     echo ''
@@ -151,13 +158,13 @@ case "$1" in
   -f|--file|file)
     contexts="$(get_contexts $2)"
     menu "$(echo $contexts)"
-    kubectl config use-context "$SELECTED_CHOICE"
+    use_context
     ;;
 
   *)
-    contexts="$(get_contexts)"
+    contexts="$(get_contexts $1)"
     menu "$(echo $contexts)"
-    kubectl config use-context "$SELECTED_CHOICE"
+    use_context
     ;;
 esac
 
