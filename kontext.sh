@@ -137,8 +137,19 @@ get_contexts() {
     echo $contexts
 }
 
+
+# Set current context
+# Usages:
+#   - use_context
+#   - use_context <kubeconfig_path>
 use_context() {
-    kubectl config use-context "$SELECTED_CHOICE"
+    local kubeconfig_path="$1"
+
+    if [ -f "$kubeconfig_path" ]; then
+        kubectl --kubeconfig "$kubeconfig_path" config use-context "$SELECTED_CHOICE"
+    else
+        kubectl config use-context "$SELECTED_CHOICE"
+    fi
 }
 
 
@@ -158,13 +169,13 @@ case "$1" in
   -f|--file|file)
     contexts="$(get_contexts $2)"
     menu "$(echo $contexts)"
-    use_context
+    use_context $2
     ;;
 
   *)
     contexts="$(get_contexts $1)"
     menu "$(echo $contexts)"
-    use_context
+    use_context $1
     ;;
 esac
 
