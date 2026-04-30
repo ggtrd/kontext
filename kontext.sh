@@ -108,33 +108,43 @@ menu() {
 }
 
 
-# List contexts by looking for the right kubeconfig to use
-# Usage: get_contexts
-get_contexts() {
-
-    # Extract contexts names from a kubeconfig yaml file
-    get_contexts_from_kubeconfig() {
-        cat "$1" | grep -A99 contexts: | grep -B99 context: | grep 'name:' | sed 's|.*:||' | sed 's| ||'
-    }
+# Look for the right kubeconfig to use
+# Usages: get_kubeconfig_best_path <kubeconfig_given_path>
+get_kubeconfig_best_path() {
+    local kubeconfig_given_path="$1"
 
     # Try to get kubeconfig from arguments (file path)
-    if [ -f "$1" ]; then
-        contexts="$(get_contexts_from_kubeconfig $1)"
+    if [ -f "$kubeconfig_given_path" ]; then
+        local path="$kubeconfig_given_path"
 
     # Try to get kubeconfig from env var $KUBECONFIG
     elif [ -f "$KUBECONFIG" ]; then
-        contexts="$(get_contexts_from_kubeconfig $KUBECONFIG)"
+        local path="$KUBECONFIG"
 
     # Try to get kubeconfig from $HOME/.kube/config
     elif [ -f "$HOME/.kube/config" ]; then
-        contexts="$(get_contexts_from_kubeconfig $HOME/.kube/config)"
+        local path="$HOME/.kube/config"
+    fi
+
+    echo $path
+}
+
+
+# Extract contexts names from a kubeconfig yaml file
+# Usages:
+#   - get_contexts
+#   - get_contexts <kubeconfig_path>
+get_contexts() {
+    local kubeconfig_path="$(get_kubeconfig_best_path $1)"
+
+    # Try to get kubeconfig from path
+    if [ -f "$kubeconfig_path" ]; then
+        cat "$kubeconfig_path" | grep -A99 contexts: | grep -B99 context: | grep 'name:' | sed 's|.*:||' | sed 's| ||'
 
     # Fallback on kubectl
     else
-        contexts="$(kubectl config get-contexts -o name)"
+        kubectl config get-contexts -o name
     fi
-
-    echo $contexts
 }
 
 
@@ -143,10 +153,10 @@ get_contexts() {
 #   - use_context
 #   - use_context <kubeconfig_path>
 use_context() {
-    local kubeconfig_path="$1"
+    local kubeconfig_path="$(get_kubeconfig_best_path $1)"
 
     if [ -f "$kubeconfig_path" ]; then
-        kubectl --kubeconfig "$kubeconfig_path" config use-context "$SELECTED_CHOICE"
+        kubectl --kubeconfig ""$kubeconfig_path"" config use-context "$SELECTED_CHOICE"
     else
         kubectl config use-context "$SELECTED_CHOICE"
     fi
@@ -172,10 +182,16 @@ case "$1" in
     use_context $2
     ;;
 
+#   '')
+#     contexts="$(get_contexts)"
+#     menu "$(echo $contexts)"
+#     use_context
+#     ;;
+
   *)
-    contexts="$(get_contexts $1)"
+    contexts="$(get_contexts $@)"
     menu "$(echo $contexts)"
-    use_context $1
+    use_context $@
     ;;
 esac
 
