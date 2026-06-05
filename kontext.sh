@@ -41,7 +41,28 @@ BG_SELECTED='\033[48;5;63m'
 FG_SELECTED='\033[38;5;15m'
 
 
+# Display log on the terminal
+# Usage: display_log <severity> <message>
+display_log() {
+    local severity="$1"
+    local message="$2"
+
+    if [ "$severity" = 'warn' ]; then
+        local severity_title="$BG_ORANGE$FG_BLACK WARN "
+        local message_colors=" $FG_ORANGE"
+    fi
+
+    # will looks like the following, but with colors:
+    # WARN message
+    printf "\n$severity_title$NO_FORMAT$message_colors$message$NO_FORMAT\n"
+}
+
+
 KUBECONFIG_FILE_HOME="$HOME/.kube/config"
+if [ "$KUBECONFIG" = '~/.kube/config' ]; then
+    display_log 'warn' "Current KUBECONFIG contains relative path '~/.kube/config' which can cause issues with kubectl. Unset KUBECONFIG or replace with absolute path $KUBECONFIG_FILE_HOME to avoid non-working contexts."
+    KUBECONFIG="$KUBECONFIG_FILE_HOME"
+fi
 
 
 # Create selectable menu list
@@ -79,17 +100,29 @@ menu() {
         done
     }
 
-    # Display a first time the menu
-    print_menu
+    prepare_terminal() {
+        # Ensure terminal is in right mode
+        stty -echo -icanon
 
-    # Ensure terminal is in right mode
-    stty -echo -icanon
+        # Hide terminal cursor
+        printf "\033[?25l"
+    }
+
+    restore_terminal() {
+        # Restore terminal
+        stty echo icanon
+
+        # Enable back terminal cursor
+        printf "\033[?25h"
+    }
 
     # Enable CTRL+C
-    trap 'stty echo icanon; printf "\033[?25h"; exit' INT TERM EXIT
+    trap 'restore_terminal; exit' INT TERM EXIT
 
-    # Hide terminal cursor
-    printf "\033[?25l"
+    prepare_terminal
+
+    # Display a first time the menu
+    print_menu
 
     # Start the program
     while true; do
@@ -106,11 +139,7 @@ menu() {
         print_menu
     done
 
-    # Restore terminal
-    stty echo icanon
-
-    # Enable back terminal cursor
-    printf "\033[?25h"
+    restore_terminal
 
     SELECTED_CHOICE="$(echo $options | cut -d ' ' -f $current)"
     if [ "$SELECTED_CHOICE" = "$option_exit" ]; then
@@ -153,7 +182,25 @@ get_kubeconfig_best_path() {
 get_contexts() {
     local kubeconfig_path="$1"
 
-    KUBECONFIG="$kubeconfig_path" kubectl config get-contexts -o name
+    # Try to get kubeconfig from path
+    # Allow to read from file only if it's /home/$USER/.kube/config
+    # - allow to browse the context quicker than with kubectl
+    # - only for /home/$USER/.kube/config usage because kubectl might not be able to use the selected context depending on the local configuration
+    if [ "$kubeconfig_path" = "$KUBECONFIG_FILE_HOME" ] && [ -f "$kubeconfig_path" ]; then
+        awk '
+            /^contexts:/ { in_section = 1; next }
+            in_section && /^[a-zA-Z]/ { in_section = 0 }
+            in_section && /name:/ {
+                val = $2;
+                gsub(/["'\'']/, "", val);
+                print val
+            }
+        ' "$kubeconfig_path"
+
+    # Fallback on kubectl
+    else
+        KUBECONFIG="$kubeconfig_path" kubectl config get-contexts -o name
+    fi
 }
 
 
@@ -171,7 +218,7 @@ use_context() {
 
         # Display a warning in case of using a context from a --file kubeconfig
         if [ "$(echo $kubeconfig_path)" != "$(echo $KUBECONFIG_FILE_HOME)" ] && [ ! "$(echo $KUBECONFIG | grep $kubeconfig_path)" ]; then
-            printf "\n$BG_ORANGE$FG_BLACK WARN $NO_FORMAT$FG_ORANGE Current context has switched to '$SELECTED_CHOICE', but the associated kubeconfig is not accessible by kubectl. You must add it to KUBECONFIG.\nCopy/paste the following line to add it.$NO_FORMAT\n"
+            display_log 'warn' "Current context has switched to '$SELECTED_CHOICE', but the associated kubeconfig is not accessible by kubectl. You must add it to KUBECONFIG.\nCopy/paste the following line to add it:"
             echo "export KUBECONFIG="\$KUBECONFIG:$KUBECONFIG_FILE_HOME:$kubeconfig_path""
             echo ''
         fi
@@ -180,6 +227,29 @@ use_context() {
         KUBECONFIG="$kubeconfig_path" kubectl config use-context "$SELECTED_CHOICE"
     fi
 }
+
+
+# # Delete context and associated user & cluster in given kubeconfig file
+# # Usage: delete_context <context_name>
+# delete_context() {
+#     local kubeconfig_path="$1"
+
+#     if [ -f "$KUBECONFIG_FILE_HOME" ]; then
+#         KUBECONFIG="$KUBECONFIG_FILE_HOME:$kubeconfig_path" kubectl config use-context "$SELECTED_CHOICE"
+
+#         # Display a warning in case of using a context from a --file kubeconfig
+#         if [ "$(echo $kubeconfig_path)" != "$(echo $KUBECONFIG_FILE_HOME)" ] && [ ! "$(echo $KUBECONFIG | grep $kubeconfig_path)" ]; then
+#             printf "\n$BG_ORANGE$FG_BLACK WARN $NO_FORMAT$FG_ORANGE Current context has switched to '$SELECTED_CHOICE', but the associated kubeconfig is not accessible by kubectl. You must add it to KUBECONFIG.\nCopy/paste the following line to add it.$NO_FORMAT\n"
+#             echo "export KUBECONFIG="\$KUBECONFIG:$KUBECONFIG_FILE_HOME:$kubeconfig_path""
+#             echo ''
+#         fi
+
+#     else
+#         KUBECONFIG="$kubeconfig_path" kubectl config use-context "$SELECTED_CHOICE"
+#     fi
+
+# }
+
 
 
 # Simple log message to display the selected kubeconfig file
@@ -192,7 +262,8 @@ log_message_kubeconfig_source() {
 
     echo ''
     if [ ! -z "$KUBECONFIG" ]; then
-        echo "$log_message $(echo KUBECONFIG=$KUBECONFIG)"
+
+        echo "$log_message $(printf "$FG_ORANGE%s$NO_FORMAT=$KUBECONFIG" 'KUBECONFIG')"
 
     elif [ ! -z "$kubeconfig_path" ]; then
         echo "$log_message $kubeconfig_path"
@@ -206,7 +277,7 @@ log_message_kubeconfig_source() {
 
 # Warn message in case of using --file/-f while KUBECONFIG exists
 if [ ! -z "$KUBECONFIG" ] && ([ ! -z "$1" ] || [ ! -z "$2" ]); then
-    printf "\n   $BG_ORANGE$FG_BLACK WARN $NO_FORMAT$FG_ORANGE KUBECONFIG env var is setted, the given kubeconfig path cannot be used.$NO_FORMAT"
+    display_log 'warn' "KUBECONFIG env var is setted, the given kubeconfig path cannot be used"
 
     # Remove args because they contains kubeconfig path
     set --
@@ -224,11 +295,17 @@ case "$1" in
     echo "  $0 -f, --file <kubeconfig_file_path>     Select kube contexts from given kubeconfig file. Cannot works if KUBECONFIG env var exists."
     echo "  $0 -h, --help                            Display this message."
     echo ''
+    exit
     ;;
 
   -f|--file|file)
     kubeconfig_path="$(get_kubeconfig_best_path $2)"
     ;;
+
+#   -d|--delete|delete)
+#     kubeconfig_path="$(get_kubeconfig_best_path $2)"
+#     [ ! -z "$3" ] &&
+#     ;;
 
   '')
     kubeconfig_path="$(get_kubeconfig_best_path)"
