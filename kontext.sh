@@ -33,9 +33,11 @@ NO_FORMAT='\033[0m'
 BG_EXIT='\033[48;5;203m'
 BG_EXIT_SELECTED='\033[48;5;160m'
 BG_ORANGE='\033[48;5;208m'
+BG_BLUE='\033[48;5;75m'
 
 FG_ORANGE='\033[38;5;215m'
 FG_BLACK='\033[38;5;232m'
+FG_BLUE='\033[38;5;75m'
 
 BG_SELECTED='\033[48;5;63m'
 FG_SELECTED='\033[38;5;15m'
@@ -52,9 +54,22 @@ display_log() {
         local message_colors=" $FG_ORANGE"
     fi
 
+    # if [ "$severity" = 'info' ]; then
+    #     local severity_title="$BG_BLUE$FG_BLACK INFO "
+    #     local message_colors=" $NO_FORMAT"
+    # fi
+
     # will looks like the following, but with colors:
-    # WARN message
+    #   WARN message
+    #   INFO message
     printf "\n$severity_title$NO_FORMAT$message_colors$message$NO_FORMAT\n"
+}
+
+
+# Get the name of the CLI
+# Usage: get_cli_name
+get_cli_name() {
+    echo "$0" | sed 's|.*/\(.*\)|\1|'
 }
 
 
@@ -229,27 +244,45 @@ use_context() {
 }
 
 
-# # Delete context and associated user & cluster in given kubeconfig file
-# # Usage: delete_context <context_name>
-# delete_context() {
-#     local kubeconfig_path="$1"
+# Delete context and associated user & cluster in given kubeconfig file
+# Usage: delete_context <context_name>
+delete_context() {
+    local context="$1"
 
-#     if [ -f "$KUBECONFIG_FILE_HOME" ]; then
-#         KUBECONFIG="$KUBECONFIG_FILE_HOME:$kubeconfig_path" kubectl config use-context "$SELECTED_CHOICE"
+    echo 'looking for context...'
 
-#         # Display a warning in case of using a context from a --file kubeconfig
-#         if [ "$(echo $kubeconfig_path)" != "$(echo $KUBECONFIG_FILE_HOME)" ] && [ ! "$(echo $KUBECONFIG | grep $kubeconfig_path)" ]; then
-#             printf "\n$BG_ORANGE$FG_BLACK WARN $NO_FORMAT$FG_ORANGE Current context has switched to '$SELECTED_CHOICE', but the associated kubeconfig is not accessible by kubectl. You must add it to KUBECONFIG.\nCopy/paste the following line to add it.$NO_FORMAT\n"
-#             echo "export KUBECONFIG="\$KUBECONFIG:$KUBECONFIG_FILE_HOME:$kubeconfig_path""
-#             echo ''
-#         fi
+    local context_json="$(kubectl config view -o jsonpath="{.contexts[?(@.name=='$context')]}")"
+    if [ -z "$context_json" ]; then
+        echo "error: context '$context' not found"
+        return
+    fi
 
-#     else
-#         KUBECONFIG="$kubeconfig_path" kubectl config use-context "$SELECTED_CHOICE"
-#     fi
+    get_cluster_from_context() {
+        kubectl config view -o jsonpath="{.contexts[?(@.name=='$context')].context.cluster}"
+    }
 
-# }
+    get_user_from_context() {
+        kubectl config view -o jsonpath="{.contexts[?(@.name=='$context')].context.user}"
+    }
 
+    local cluster="$(get_cluster_from_context)"
+    local user="$(get_user_from_context)"
+
+    printf '\ncontext found:\n'
+    printf "  context: $FG_BLUE$context$NO_FORMAT\n"
+    printf "  cluster: $FG_BLUE$cluster$NO_FORMAT\n"
+    printf "  user:    $FG_BLUE$user$NO_FORMAT\n\n"
+
+    read -p "delete context and its associated cluster/user ? [y/N] " confirmation
+    if [ "$confirmation" = 'y' ]; then
+        echo 'deleting...'
+        kubectl config delete-cluster "$cluster"
+        kubectl config delete-user "$user"
+        kubectl config delete-context "$context"
+    else
+        echo 'aborted'
+    fi
+}
 
 
 # Simple log message to display the selected kubeconfig file
@@ -275,13 +308,26 @@ log_message_kubeconfig_source() {
 }
 
 
-# Warn message in case of using --file/-f while KUBECONFIG exists
-if [ ! -z "$KUBECONFIG" ] && ([ ! -z "$1" ] || [ ! -z "$2" ]); then
-    display_log 'warn' "KUBECONFIG env var is setted, the given kubeconfig path cannot be used"
+# Run the main menu & switch to selected context
+# Usage: run_menu <kubeconfig_path>
+run_menu() {
+    local kubeconfig_path="$1"
 
-    # Remove args because they contains kubeconfig path
-    set --
-fi
+    # Warn message in case of using --file/-f while KUBECONFIG exists
+    if [ ! -z "$KUBECONFIG" ] && [ ! -z "$2" ]; then
+        display_log 'warn' "KUBECONFIG env var is setted, the given kubeconfig path cannot be used"
+
+        # Remove args because they contains kubeconfig path
+        set --
+    fi
+
+    log_message_kubeconfig_source $kubeconfig_path
+
+    contexts="$(get_contexts $kubeconfig_path)"
+    menu "$(echo $contexts)"
+
+    use_context $kubeconfig_path
+}
 
 
 # Offers differents options from args
@@ -290,39 +336,39 @@ case "$1" in
     echo ''
     echo " Quickly select Kubernetes context"
     echo " usages:"
-    echo "  $0                                       Select kube contexts from default kubeconfig file."
-    echo "  $0 <kubeconfig_file_path>                Same as -f, --file."
-    echo "  $0 -f, --file <kubeconfig_file_path>     Select kube contexts from given kubeconfig file. Cannot works if KUBECONFIG env var exists."
-    echo "  $0 -h, --help                            Display this message."
+    echo "  $(get_cli_name)                                       Select kube contexts from current kubeconfig."
+    echo "  $(get_cli_name) <kubeconfig_file_path>                Same as -f, --file."
+    echo "  $(get_cli_name) -f, --file <kubeconfig_file_path>     Select kube contexts from given kubeconfig file. Cannot works if KUBECONFIG env var exists."
+    echo "  $(get_cli_name) -d, --delete <context>                Delete the given context and its associated cluster/user."
+    echo "  $(get_cli_name) -h, --help                            Display this message."
     echo ''
     exit
     ;;
 
   -f|--file|file)
     kubeconfig_path="$(get_kubeconfig_best_path $2)"
+    run_menu $kubeconfig_path
     ;;
 
-#   -d|--delete|delete)
-#     kubeconfig_path="$(get_kubeconfig_best_path $2)"
-#     [ ! -z "$3" ] &&
-#     ;;
+  -d|--delete|delete)
+    if [ -z "$2" ]; then
+        echo 'error: missing context name\n--help for more informations'
+        exit
+    fi
+    delete_context "$2"
+    exit
+    ;;
 
   '')
     kubeconfig_path="$(get_kubeconfig_best_path)"
+    run_menu $kubeconfig_path
     ;;
 
   *)
     kubeconfig_path="$(get_kubeconfig_best_path $1)"
+    run_menu $kubeconfig_path
     ;;
 esac
-
-
-log_message_kubeconfig_source $kubeconfig_path
-
-contexts="$(get_contexts $kubeconfig_path)"
-menu "$(echo $contexts)"
-
-use_context $kubeconfig_path
 
 
 exit
