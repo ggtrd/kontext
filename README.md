@@ -1,17 +1,17 @@
 # Kontext
 
-Quickly switch/delete/*create* Kubernetes contexts.
-
-[kubectl](https://kubernetes.io/fr/docs/reference/kubectl/) must be installed.
-
-Kontext is POSIX compliant.
-
+Quickly manage Kubernetes contexts.
 
 <div align="center">
 	<img height="480px" alt="demo gif" src=".github/media/demo.gif">
 	<br>
 </div>
 
+<br>
+
+[kubectl](https://kubernetes.io/fr/docs/reference/kubectl/) must be installed.
+
+Kontext is POSIX compliant.
 
 ## Usage
 * `switch` current the context from selectable menu
