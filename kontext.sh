@@ -70,7 +70,7 @@ display_log() {
 # Get the name of the CLI
 # Usage: get_cli_name
 get_cli_name() {
-    echo "$0" | sed 's|.*/\(.*\)\..*|\1|'
+    basename "$0" .sh
 }
 
 
