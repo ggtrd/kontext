@@ -384,7 +384,6 @@ update_cli_informations() {
             break
         else
             create_file_version 'untagged' "$checksum_current" "$latest_tag"
-            break
         fi
     done
 }
