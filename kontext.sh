@@ -422,7 +422,7 @@ cli_update_notification() {
     fi
 
     # Display notification only if current tag is not the latest
-    if [ "$(get_info 'current-tag')" != "$(get_info 'available-tag')" ]; then
+    if [ "$(get_info 'available-tag')" = 'none' ]; then
         available_tag="$(cat $VERSION_FILE | grep 'available-tag:' | sed 's|.*: ||')"
         display_log 'info' "new version $available_tag is available at https://github.com/$GITHUB_REPO/releases"
     fi
