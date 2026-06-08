@@ -6,6 +6,13 @@ Quickly switch/delete/*create* Kubernetes contexts.
 
 Kontext is POSIX compliant.
 
+
+<div align="center">
+	<img height="480px" alt="demo gif" src=".github/media/demo.gif">
+	<br>
+</div>
+
+
 ## Usage
 * `switch` current the context from selectable menu
     ```
