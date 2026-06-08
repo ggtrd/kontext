@@ -83,7 +83,7 @@ fi
 DIR_TMP="/tmp/$(get_cli_name)"
 mkdir -p $DIR_TMP
 
-VERSION_FILE="$(pwd)/$(get_cli_name).version"
+VERSION_FILE="$(dirname $0)/$(get_cli_name).version"
 
 GITHUB_REPO='ggtrd/kontext'
 
