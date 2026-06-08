@@ -1,6 +1,13 @@
 # Kontext
 
-Quickly switch/delete/*create* Kubernetes contexts.
+Quickly manage Kubernetes contexts.
+
+<div align="center">
+	<img height="480px" alt="demo gif" src=".github/media/demo.gif">
+	<br>
+</div>
+
+<br>
 
 [kubectl](https://kubernetes.io/fr/docs/reference/kubectl/) must be installed.
 
