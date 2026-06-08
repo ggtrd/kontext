@@ -43,6 +43,7 @@ BG_SELECTED='\033[48;5;63m'
 FG_SELECTED='\033[38;5;15m'
 
 
+
 # Display log on the terminal
 # Usage: display_log <severity> <message>
 display_log() {
@@ -54,10 +55,10 @@ display_log() {
         local message_colors=" $FG_ORANGE"
     fi
 
-    # if [ "$severity" = 'info' ]; then
-    #     local severity_title="$BG_BLUE$FG_BLACK INFO "
-    #     local message_colors=" $NO_FORMAT"
-    # fi
+    if [ "$severity" = 'info' ]; then
+        local severity_title="$BG_BLUE$FG_BLACK INFO "
+        local message_colors=" $FG_BLUE"
+    fi
 
     # will looks like the following, but with colors:
     #   WARN message
@@ -69,7 +70,7 @@ display_log() {
 # Get the name of the CLI
 # Usage: get_cli_name
 get_cli_name() {
-    echo "$0" | sed 's|.*/\(.*\)|\1|'
+    echo "$0" | sed 's|.*/\(.*\)\..*|\1|'
 }
 
 
@@ -78,6 +79,13 @@ if [ "$KUBECONFIG" = '~/.kube/config' ]; then
     display_log 'warn' "Current KUBECONFIG contains relative path '~/.kube/config' which can cause issues with kubectl. Unset KUBECONFIG or replace with absolute path $KUBECONFIG_FILE_HOME to avoid non-working contexts."
     KUBECONFIG="$KUBECONFIG_FILE_HOME"
 fi
+
+DIR_TMP="/tmp/$(get_cli_name)"
+mkdir -p $DIR_TMP
+
+VERSION_FILE="$(pwd)/$(get_cli_name).version"
+
+GITHUB_REPO='ggtrd/kontext'
 
 
 # Create selectable menu list
@@ -330,22 +338,121 @@ run_menu() {
 }
 
 
+
+## -- UPDATE CLI --
+
+# Update CLI informations by testing against Github releases
+# Based on a watched file (because this CLI is a single file, designed to be as light as possible)
+# Usages: update_cli_informations
+update_cli_informations() {
+    # Stop script if missing dependency
+    required_commands="curl git sha256sum"
+    for command in $required_commands; do
+        if [ -z "$(command -v $command)" ]; then
+            printf "\nerror: required command not found: $FG_ORANGE$command$NO_FORMAT\n"
+            return
+        fi
+    done
+
+    # Create a well-formated version file
+    # Usage: create_file_version <version_tag> <sha25sum of watched file> <update-found>
+    create_file_version() {
+        echo "current-tag: $1" > $VERSION_FILE
+        echo "current-sha256sum: $2" >> $VERSION_FILE
+        echo "available-tag: $3" >> $VERSION_FILE # if "none" = up-to-date; if "x.x.x" = update available to this tag
+    }
+
+    # Get list of tags from Github
+    local file_tmp_github_tags="$DIR_TMP/github_tags"
+    git ls-remote --tags https://github.com/$GITHUB_REPO.git | sed 's|.*/\(.*\)|\1|' > $file_tmp_github_tags
+
+    # Get the latest tag from Github
+    local latest_tag="$(cat $file_tmp_github_tags | tail -n 1)"
+    if [ -z "$latest_tag" ]; then
+        latest_tag='unknown'
+    fi
+
+    # Get checksum of the current installed file to compare with remote files
+    local checksum_current="$(cat $0 | sha256sum | cut -d' ' -f1)"
+
+    # Get the current version by testing against all existing Github releases
+    for tag in $(cat $file_tmp_github_tags); do
+        local checksum_remote="$(curl -sk "https://raw.githubusercontent.com/$GITHUB_REPO/refs/tags/$tag/kontext.sh" | sha256sum | cut -d' ' -f1)"
+
+        if [ "$(echo $checksum_current)" = "$(echo $checksum_remote)" ]; then
+            create_file_version "$tag" "$checksum_current" 'none'
+            break
+        else
+            create_file_version 'untagged' "$checksum_current" "$latest_tag"
+            break
+        fi
+    done
+}
+
+
+# Get CLI informations from current installation or get them remotely
+# Usages: get_cli_informations
+get_cli_informations() {
+    if [ ! -f "$VERSION_FILE" ]; then
+        update_cli_informations
+    fi
+    cat "$VERSION_FILE"
+}
+
+
+# Automatically inform the user that an update is available
+# Usages:
+#   - cli_update_notification
+#   - export KONTEXT_DISABLE_UPDATE_NOTIFICATION=true to disable
+cli_update_notification() {
+    # Allow user to turn off this trigger from an env var
+    if [ "$(echo $KONTEXT_DISABLE_UPDATE_NOTIFICATION)" = 'true' ]; then
+        return
+    fi
+
+    # Get an info from the VERSION_FILE
+    # Usage: get_info <key>
+    get_info() {
+        local key="$1"
+        cat $VERSION_FILE | grep $key | sed 's|.*: ||'
+    }
+
+    # Create the file or refresh it once a day
+    if [ ! -f "$VERSION_FILE" ] || [ "$(find $VERSION_FILE -mtime +1 -print)" ]; then
+        update_cli_informations
+    fi
+
+    # Display notification only if current tag is not the latest
+    if [ "$(get_info 'current-tag')" != "$(get_info 'available-tag')" ]; then
+        available_tag="$(cat $VERSION_FILE | grep 'available-tag:' | sed 's|.*: ||')"
+        display_log 'info' "new version $available_tag is available at https://github.com/$GITHUB_REPO/releases"
+    fi
+}
+
+## -- UPDATE CLI --
+
+
+
 # Offers differents options from args
 case "$1" in
   -h|--help|help)
     echo ''
-    echo " Quickly select Kubernetes context"
-    echo " usages:"
+    echo " Quickly manage Kubernetes context"
+    echo ''
+    echo " Usages:"
     echo "  $(get_cli_name)                                       Select kube contexts from current kubeconfig."
     echo "  $(get_cli_name) <kubeconfig_file_path>                Same as -f, --file."
     echo "  $(get_cli_name) -f, --file <kubeconfig_file_path>     Select kube contexts from given kubeconfig file. Cannot works if KUBECONFIG env var exists."
     echo "  $(get_cli_name) -d, --delete <context>                Delete the given context and its associated cluster/user."
     echo "  $(get_cli_name) -h, --help                            Display this message."
+    echo "  $(get_cli_name) -v, --version                         Get current version of $(get_cli_name)."
+    echo "  $(get_cli_name)     --check-update                    Check for update of $(get_cli_name)."
     echo ''
     exit
     ;;
 
   -f|--file|file)
+    cli_update_notification
     kubeconfig_path="$(get_kubeconfig_best_path $2)"
     run_menu $kubeconfig_path
     ;;
@@ -356,15 +463,26 @@ case "$1" in
         exit
     fi
     delete_context "$2"
-    exit
+    ;;
+
+  -cu|--check-update|check-update)
+    update_cli_informations
+    echo 'refreshed'
+    echo 'get CLI informations with --version'
+    ;;
+
+  -v|--version|version)
+    get_cli_informations
     ;;
 
   '')
+    cli_update_notification
     kubeconfig_path="$(get_kubeconfig_best_path)"
     run_menu $kubeconfig_path
     ;;
 
   *)
+    cli_update_notification
     kubeconfig_path="$(get_kubeconfig_best_path $1)"
     run_menu $kubeconfig_path
     ;;
