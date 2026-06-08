@@ -9,7 +9,7 @@ Quickly manage Kubernetes contexts.
 
 <br>
 
-[kubectl](https://kubernetes.io/fr/docs/reference/kubectl/) must be installed.
+[kubectl](https://kubernetes.io/docs/reference/kubectl/) must be installed.
 
 Kontext is POSIX compliant.
 
