@@ -27,6 +27,13 @@
 ARROW_UP="$(printf '\033[A')"
 ARROW_DOWN="$(printf '\033[B')"
 
+# Mouse (only begin of pattern because the cursor position coordinates are part of it)
+SCROLL_UP_PATTERN="$(printf '\033[<64;')*"
+SCROLL_DOWN_PATTERN="$(printf '\033[<65;')*"
+MIDDLE_CLICK_PATTERN="$(printf '\033[<1;')*M"
+# LEFT_CLICK_PATTERN="$(printf '\033[<0;')*M"
+# RIGHT_CLICK_PATTERN="$(printf '\033[<2;')*M"
+
 # Colors
 NO_FORMAT='\033[0m'
 
@@ -129,6 +136,9 @@ menu() {
 
         # Hide terminal cursor
         printf "\033[?25l"
+
+        # Enable mouse scroll
+        printf "\e[?1000h\e[?1006h"
     }
 
     restore_terminal() {
@@ -137,6 +147,9 @@ menu() {
 
         # Enable back terminal cursor
         printf "\033[?25h"
+
+        # Disable mouse scroll
+        printf "\e[?1000l\e[?1006l"
     }
 
     # Enable CTRL+C
@@ -149,12 +162,19 @@ menu() {
 
     # Start the program
     while true; do
-        # Read keyboards entries
-        local key="$(dd bs=3 count=1 2>/dev/null)"
+        # Read keyboards entries (bs=3 for arrow keys, bs=12 for mouse click)
+        # local key="$(dd bs=3 count=1 2>/dev/null)"
+        local key="$(dd bs=12 count=1 2>/dev/null)"
+
         case "$key" in
-            "$ARROW_UP")    [ "$current" -gt 1 ] && current=$((current - 1)) ;;
-            "$ARROW_DOWN")  [ "$current" -lt "$total" ] && current=$((current + 1)) ;;
-            "")             break ;;
+            $SCROLL_UP_PATTERN)     [ "$current" -gt 1 ] && current=$((current - 1)) ;;
+            "$ARROW_UP")            [ "$current" -gt 1 ] && current=$((current - 1)) ;;
+            $SCROLL_DOWN_PATTERN)   [ "$current" -lt "$total" ] && current=$((current + 1)) ;;
+            "$ARROW_DOWN")          [ "$current" -lt "$total" ] && current=$((current + 1)) ;;
+            $MIDDLE_CLICK_PATTERN)  break ;;    # Select item from list with mouse middle click
+            # $LEFT_CLICK_PATTERN)    break ;;    # Select item from list with mouse left click
+            # $RIGHT_CLICK_PATTERN)   break ;;    # Select item from list with mouse right click
+            "")                     break ;;    # Select item from list with Enter
         esac
 
         # Ensure the list is well-displayed in good shape
