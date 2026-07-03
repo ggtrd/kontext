@@ -90,4 +90,14 @@ install_artifact "/tmp/$MAIN_NAME/$MAIN_NAME-$LATEST_TAG/$MAIN_NAME.sh"     # /t
 
 
 
+# Simple log message
+echo ''
+if [ "$(command -v $MAIN_NAME)" ]; then
+    echo "sucessfully installed $MAIN_NAME !"
+else
+    echo "error: $MAIN_NAME not installed"
+fi
+
+
+
 exit
