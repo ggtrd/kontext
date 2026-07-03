@@ -39,24 +39,6 @@ curl -s https://raw.githubusercontent.com/ggtrd/kontext/refs/heads/main/install.
 ```
 
 
-
-* Bash
-    ```
-    KONTEXT_CLI="/home/$USER/.kube/kontext.sh" \
-        && curl https://raw.githubusercontent.com/ggtrd/kontext/refs/heads/main/kontext.sh -o $KONTEXT_CLI \
-        && chmod +x $KONTEXT_CLI \
-        && echo "alias kontext='$KONTEXT_CLI'" >> /home/$USER/.bashrc \
-        && source /home/$USER/.bashrc
-    ```
-* Fish
-    ```
-    set -g KONTEXT_CLI "/home/$USER/.kube/kontext.sh" \
-        && curl https://raw.githubusercontent.com/ggtrd/kontext/refs/heads/main/kontext.sh -o $KONTEXT_CLI \
-        && chmod +x $KONTEXT_CLI \
-        && echo "alias kontext '$KONTEXT_CLI'" >> /home/$USER/.config/fish/config.fish \
-        && source /home/$USER/.config/fish/config.fish
-    ```
-
 ### Use as a simple script
 ```
 ./kontext.sh

@@ -24,6 +24,17 @@
 
 
 
+# Stop script if missing dependency
+required_commands="curl git"
+for command in $required_commands; do
+    if [ -z "$(command -v $command)" ]; then
+        echo "error: required command not found: $command"
+        exit
+    fi
+done
+
+
+
 REPO='ggtrd/kontext'
 
 REPO_URL="https://github.com/$REPO"
@@ -38,9 +49,9 @@ INSTALL_DIR="$HOME/.local/bin"
 
 
 
-# Download artifact from release
-# Usage: donwload_artifact
-donwload_artifact() {
+# Download $ARTIFACT_URL from release
+# Usage: donwload
+donwload() {
     local tmp_path="/tmp/$MAIN_NAME"
     local archive_path="$tmp_path.zip"
 
@@ -55,12 +66,12 @@ donwload_artifact() {
 
 
 
-# Install artifact on the system
-# Usage: install_artifact
-install_artifact() {
+# Install given file (downloaded from $ARTIFACT_URL) to $PATH
+# Usage: install <artifact_path>
+install() {
     local artifact_path="$1"
 
-    if [ ! -f $artifact_path ]; then
+    if [ ! -f "$artifact_path" ]; then
         echo "error: missing artifact from $artifact_path"
         return
     fi
@@ -73,8 +84,9 @@ install_artifact() {
 }
 
 
-donwload_artifact
-install_artifact "/tmp/$MAIN_NAME/$MAIN_NAME-$LATEST_TAG/$MAIN_NAME.sh"
+
+donwload_artifact                                                           # https://github.com/ggtrd/kontext/archive/refs/tags/tag.zip -> download + extract to /tmp/kontext/
+install_artifact "/tmp/$MAIN_NAME/$MAIN_NAME-$LATEST_TAG/$MAIN_NAME.sh"     # /tmp/kontext/kontext-tag/kontext.sh -> copy to $HOME/.bin/local/kontext.sh
 
 
 
