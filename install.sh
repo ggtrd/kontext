@@ -24,110 +24,58 @@
 
 
 
-# Simple script to manage program installation & updates
-# script usage: export INSTALLER_SOURCE_FILE=<local/https sources> && ./install.sh
+REPO='ggtrd/kontext'
 
+REPO_URL="https://github.com/$REPO"
+MAIN_NAME="$(echo $REPO | cut -d/ -f2)"
 
-# Stop script if missing dependency
-required_commands="curl git"
-for command in $required_commands; do
-    if [ -z "$(command -v $command)" ]; then
-        echo "error: required command not found: $command"
-        exit
-    fi
-done
-
-
-SOURCE_FILE="$INSTALLER_SOURCE_FILE"
-SOURCE_NAME="$(basename "$SOURCE_FILE")"
-CMD_NAME="$(echo $SOURCE_NAME | cut -d'.' -f1)"
+LATEST_TAG="$(git ls-remote --tags $REPO_URL | sed 's|.*tags/\(.*\)|\1|' | tail -n 1)"
+ARTIFACT_URL="https://github.com/$REPO/archive/refs/tags/$LATEST_TAG.zip"
 
 INSTALL_DIR="$HOME/.local/bin"
-CONFIG_DIR="$HOME/.config/$CMD_NAME"
-VERSION_FILE="$CONFIG_DIR/$CMD_NAME.version"
-
-# Stop script if missing SOURCE_FILE
-if [ -z "$SOURCE_FILE" ]; then
-    echo "error: missing SOURCE_FILE"
-    echo "$0 --help"
-    exit
-fi
+# CONFIG_DIR="$HOME/.config/$MAIN_NAME"
+# VERSION_FILE="$CONFIG_DIR/$MAIN_NAME.version"
 
 
-# Create a structured version file (YAML based)
-# Usage: create_version_file
-create_version_file() {
-    mkdir -p "$CONFIG_DIR"
 
-    # Case https://raw.githubusercontent.com/$repo/refs/tags/$tag/FILE
-    if [ "$(echo $SOURCE_FILE) | grep 'https://raw.githubusercontent.com'" ]; then
-        local repo="$(echo $SOURCE_FILE | cut -d'/' -f4-5)"
-        local tag="$(echo $SOURCE_FILE | cut -d'/' -f8)"
+# Download artifact from release
+# Usage: donwload_artifact
+donwload_artifact() {
+    local tmp_path="/tmp/$MAIN_NAME"
+    local archive_path="$tmp_path.zip"
 
-    # Case https://github.com/$repo/archive/refs/tags/$tag.zip
-    elif [ "$(echo $SOURCE_FILE) | grep 'https://github.com'" ]; then
-        local repo="$(echo $SOURCE_FILE | cut -d'/' -f4-5)"
-        local tag="$(echo $SOURCE_FILE | cut -d'/' -f9)"
+    # Clean /tmp before get new files
+    rm -rf $tmp_path
+    rm -rf $archive_path
 
-    ## Others cases
-    # if [ "$(echo $SOURCE_FILE) | grep 'CASE_PLACEHOLDER'" ]; then
-    #     local repo="$(echo $SOURCE_FILE | CASE_PLACEHOLDER)"
-    #     local tag="$(echo $SOURCE_FILE | CASE_PLACEHOLDER)"
-
-    else
-        local repo='unknown'
-        local tag='unknown'
-    fi
-
-    # Write the file
-    echo "repo: $repo" > $VERSION_FILE
-    echo "tag: $tag" >> $VERSION_FILE
+    # Download and extract
+    curl -L $ARTIFACT_URL > $archive_path
+    unzip -d $tmp_path/ $archive_path
 }
 
 
-# Install the program
-# > create dedicated config folder
-# > create .version file in the config folder
-# > add executable to PATH
-# Usage: install
-install() {
-    mkdir -p "$INSTALL_DIR"
 
-    # Install the program
-    # Detect if sources are local or HTTP/S
-    if [ "$(echo $SOURCE_FILE | grep 'http' | grep '://')" ]; then
-        curl -sk $SOURCE_FILE -o $INSTALL_DIR/$SOURCE_NAME
-    else
-        cp $SOURCE_FILE $INSTALL_DIR/$SOURCE_NAME
+# Install artifact on the system
+# Usage: install_artifact
+install_artifact() {
+    local artifact_path="$1"
+
+    if [ ! -f $artifact_path ]; then
+        echo "error: missing artifact from $artifact_path"
+        return
     fi
 
-    mv $INSTALL_DIR/$SOURCE_NAME $INSTALL_DIR/$CMD_NAME
+    # Ensure dir exists
+    mkdir -p $INSTALL_DIR
 
-    chmod +x $INSTALL_DIR/$CMD_NAME
+    # Install the artifact
+    cp $artifact_path "$INSTALL_DIR/$MAIN_NAME"
 }
 
 
-# # Check for updates of the program
-# # Usage: check_updates_from_github
-# check_updates_from_github() {
-#     local repo="cat $VERSION_FILE | grep 'repo:' | cut -d' ' -f2"
-#     local tag="cat $VERSION_FILE | grep 'tag:' | cut -d' ' -f2"
-#     if [ -z "$repo" ] || [ -z "$tag" ]; then
-#         echo "error: unknown repo or tag from $VERSION_FILE"
-#         return
-#     fi
-
-#     local tag_available="$(git ls-remote --tags https://github.com/$repo.git | sed 's|.*/\(.*\)|\1|')"
-#     if [ "$(echo $tag)" = "$(echo $tag_available)" ]; then
-#         echo 'already up-to-date'
-#     else
-#         echo "found an update to version '$tag_available'"
-#     fi
-# }
+donwload_artifact
+install_artifact "/tmp/$MAIN_NAME/$MAIN_NAME-$LATEST_TAG/$MAIN_NAME.sh"
 
 
-install
-create_version_file
-# check_updates_from_github
 
 exit
