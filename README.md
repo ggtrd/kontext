@@ -34,6 +34,12 @@ Kontext is POSIX compliant.
 
 ## Installation
 ### Install on current user
+```
+curl -s https://raw.githubusercontent.com/ggtrd/kontext/refs/heads/main/install.sh | sh
+```
+
+
+
 * Bash
     ```
     KONTEXT_CLI="/home/$USER/.kube/kontext.sh" \
