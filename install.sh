@@ -24,8 +24,11 @@
 
 
 
+REPO='ggtrd/kontext'
+
+
 # Stop script if missing dependency
-required_commands="curl git"
+required_commands="curl git unzip"
 for command in $required_commands; do
     if [ -z "$(command -v $command)" ]; then
         echo "error: required command not found: $command"
@@ -33,9 +36,6 @@ for command in $required_commands; do
     fi
 done
 
-
-
-REPO='ggtrd/kontext'
 
 REPO_URL="https://github.com/$REPO"
 MAIN_NAME="$(echo $REPO | cut -d/ -f2)"
@@ -60,8 +60,8 @@ donwload_artifact() {
     rm -rf $archive_path
 
     # Download and extract
-    curl -L $ARTIFACT_URL > $archive_path
-    unzip -d $tmp_path/ $archive_path
+    curl -ksL $ARTIFACT_URL > $archive_path
+    unzip -qd $tmp_path/ $archive_path
 }
 
 
@@ -91,9 +91,9 @@ install_artifact "/tmp/$MAIN_NAME/$MAIN_NAME-$LATEST_TAG/$MAIN_NAME.sh"     # /t
 
 
 # Simple log message
-echo ''
 if [ "$(command -v $MAIN_NAME)" ]; then
-    echo "sucessfully installed $MAIN_NAME !"
+    echo 'successful installation !'
+    echo "usage: $MAIN_NAME"
 else
     echo "error: $MAIN_NAME not installed"
 fi
