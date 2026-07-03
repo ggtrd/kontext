@@ -50,8 +50,8 @@ INSTALL_DIR="$HOME/.local/bin"
 
 
 # Download $ARTIFACT_URL from release
-# Usage: donwload
-donwload() {
+# Usage: donwload_artifact
+donwload_artifact() {
     local tmp_path="/tmp/$MAIN_NAME"
     local archive_path="$tmp_path.zip"
 
@@ -67,12 +67,12 @@ donwload() {
 
 
 # Install given file (downloaded from $ARTIFACT_URL) to $PATH
-# Usage: install <artifact_path>
-install() {
-    local artifact_path="$1"
+# Usage: install_artifact <downloaded_zip_sub_path>
+install_artifact() {
+    local artifact_sub_path="$1"
 
-    if [ ! -f "$artifact_path" ]; then
-        echo "error: missing artifact from $artifact_path"
+    if [ ! -f "$artifact_sub_path" ]; then
+        echo "error: missing artifact from $artifact_sub_path"
         return
     fi
 
@@ -80,7 +80,7 @@ install() {
     mkdir -p $INSTALL_DIR
 
     # Install the artifact
-    cp $artifact_path "$INSTALL_DIR/$MAIN_NAME"
+    cp $artifact_sub_path "$INSTALL_DIR/$MAIN_NAME"
 }
 
 
