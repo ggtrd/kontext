@@ -35,7 +35,7 @@ Kontext is POSIX compliant.
 ## Installation
 ### Install on current user
 ```
-curl -s https://raw.githubusercontent.com/ggtrd/kontext/refs/heads/main/install.sh | sh
+curl -s https://raw.githubusercontent.com/ggtrd/kontext/main/install.sh | sh
 ```
 
 
