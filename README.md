@@ -14,7 +14,7 @@ Quickly manage Kubernetes contexts.
 Kontext is POSIX compliant.
 
 ## Usage
-* `switch` current the context from selectable menu
+* `switch` the current context from selectable menu
     ```
     kontext
     ```
@@ -44,6 +44,13 @@ curl -s https://raw.githubusercontent.com/ggtrd/kontext/main/install.sh | sh
 ./kontext.sh
 ```
 
+## Customization
+| Environment variables                   | Type      | Default
+| ---                                     | ---       | ---
+| `KONTEXT_PAGINATION_BUFFER`             | number    | `20`
+| `KONTEXT_DISABLE_UPDATE_NOTIFICATION`   | boolean   | `false`
+
+<br>
 
 # License
 This project is licensed under the MIT License. See the [LICENSE](https://github.com/ggtrd/kontext/blob/main/LICENSE.md) file for details.
