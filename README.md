@@ -14,7 +14,7 @@ Quickly manage Kubernetes contexts.
 Kontext is POSIX compliant.
 
 ## Usage
-* `switch` current the context from selectable menu
+* `switch` the current context from selectable menu
     ```
     kontext
     ```

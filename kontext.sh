@@ -527,7 +527,7 @@ cli_update_notification() {
 case "$1" in
   -h|--help|help)
     echo ''
-    echo " Quickly manage Kubernetes context"
+    echo " Quickly manage Kubernetes contexts"
     echo ''
     echo " Usages:"
     echo "  $(get_cli_name)                                       Select kube contexts from current kubeconfig."
