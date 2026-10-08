@@ -45,10 +45,10 @@ curl -s https://raw.githubusercontent.com/ggtrd/kontext/main/install.sh | sh
 ```
 
 ## Customization
-| Env variable                          | Type      | Default
-| ---                                   | ---       | ---
-| KONTEXT_PAGINATION_BUFFER             | number    | 20
-| KONTEXT_DISABLE_UPDATE_NOTIFICATION   | boolean   | false
+| Environment variables                   | Type      | Default
+| ---                                     | ---       | ---
+| `KONTEXT_PAGINATION_BUFFER`             | number    | `20`
+| `KONTEXT_DISABLE_UPDATE_NOTIFICATION`   | boolean   | `false`
 
 <br>
 
