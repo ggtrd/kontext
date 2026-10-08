@@ -23,6 +23,8 @@
 # SOFTWARE.
 
 
+# set -x
+
 # Keyboard keys
 ARROW_UP="$(printf '\033[A')"
 ARROW_DOWN="$(printf '\033[B')"
@@ -34,6 +36,8 @@ MIDDLE_CLICK_PATTERN="$(printf '\033[<1;')*M"
 # LEFT_CLICK_PATTERN="$(printf '\033[<0;')*M"
 # RIGHT_CLICK_PATTERN="$(printf '\033[<2;')*M"
 
+LINE_OVERRIDER='\033[2K'
+
 # Colors
 NO_FORMAT='\033[0m'
 
@@ -42,8 +46,9 @@ BG_EXIT_SELECTED='\033[48;5;160m'
 BG_ORANGE='\033[48;5;208m'
 BG_BLUE='\033[48;5;75m'
 
-FG_ORANGE='\033[38;5;215m'
 FG_BLACK='\033[38;5;232m'
+FG_GREY='\033[38;5;240m'
+FG_ORANGE='\033[38;5;215m'
 FG_BLUE='\033[38;5;75m'
 
 BG_SELECTED='\033[48;5;63m'
@@ -103,31 +108,80 @@ menu() {
     local current=1
     local total="$(echo $options | wc -w)"
 
+    if [ -z "$KONTEXT_PAGINATION_BUFFER" ]; then
+        local page_buffer=20
+    else
+        local page_buffer="$KONTEXT_PAGINATION_BUFFER"
+    fi
+
+    local lines_printed=0
+
+
     # Print menu with selectables options
     # Usage: print_menu
     print_menu() {
-        i=1
+        lines_printed=0
+
+        # Pagination buffer calculation
+        local start=1
+        if [ "$total" -gt "$page_buffer" ]; then
+            start=$((current - page_buffer / 2))
+            if [ "$start" -lt 1 ]; then
+                start=1
+            fi
+
+            local max_start=$((total - page_buffer + 1))
+            if [ "$start" -gt "$max_start" ]; then
+                start=$max_start
+            fi
+        fi
+        local end=$((start + page_buffer - 1))
+        if [ "$end" -gt "$total" ]; then
+            end=$total
+        fi
+
+
+        # Top indicator
+        if [ "$start" -gt 1 ]; then
+            printf "$LINE_OVERRIDER    $FG_GREY▲ %d others...$NO_FORMAT\n" "$((start - 1))"
+            lines_printed=$((lines_printed + 1))
+        fi
+
+
+        local i=1
         for option in $options; do
 
-            # exception for "exit" option
-            if [ "$option" = "$option_exit" ]; then
-                if [ "$i" -eq "$current" ]; then
-                    printf " > $BG_EXIT_SELECTED$FG_SELECTED %s $NO_FORMAT\n" "$option"
+            # Pagination buffer
+            if [ "$i" -ge "$start" ] && [ "$i" -le "$end" ]; then
+
+                # exception for "exit" option
+                if [ "$option" = "$option_exit" ]; then
+                    if [ "$i" -eq "$current" ]; then
+                        printf "$LINE_OVERRIDER > $BG_EXIT_SELECTED$FG_SELECTED %s $NO_FORMAT\n" "$option"
+                    else
+                        printf "$LINE_OVERRIDER   $BG_EXIT$FG_BLACK %s $NO_FORMAT\n" "$option"
+                    fi
+
+                # standard display
                 else
-                    printf "   $BG_EXIT$FG_BLACK %s $NO_FORMAT\n" "$option"
+                    if [ "$i" -eq "$current" ]; then
+                        printf "$LINE_OVERRIDER > $BG_SELECTED$FG_SELECTED %s $NO_FORMAT\n" "$option"
+                    else
+                        printf "$LINE_OVERRIDER   $NO_FORMAT %s $NO_FORMAT\n" "$option"
+                    fi
+
                 fi
 
-            # standard display
-            else
-                if [ "$i" -eq "$current" ]; then
-                    printf " > $BG_SELECTED$FG_SELECTED %s $NO_FORMAT\n" "$option"
-                else
-                    printf "   $NO_FORMAT %s $NO_FORMAT\n" "$option"
-                fi
-
+                lines_printed=$((lines_printed + 1))
             fi
             i=$((i + 1))
         done
+
+        # Bottom indicator
+        if [ "$end" -lt "$total" ]; then
+            printf "$LINE_OVERRIDER    $FG_GREY▼ %d others...$NO_FORMAT\n" "$((total - end))"
+            lines_printed=$((lines_printed + 1))
+        fi
     }
 
     prepare_terminal() {
@@ -177,9 +231,26 @@ menu() {
             "")                     break ;;    # Select item from list with Enter
         esac
 
-        # Ensure the list is well-displayed in good shape
-        printf "\033[%dA" "$total"
+        # Save previous view line count
+        local last_lines=$lines_printed
+
+        # Move back up to the top of the previous menu
+        if [ "$last_lines" -gt 0 ]; then
+            printf "\033[%dA" "$last_lines"
+        fi
+
         print_menu
+
+        # If the new menu has fewer lines than the previous one, clear trailing lines
+        if [ "$last_lines" -gt "$lines_printed" ]; then
+            local diff=$((last_lines - lines_printed))
+            local d=0
+            while [ "$d" -lt "$diff" ]; do
+                printf "$LINE_OVERRIDER\n"
+                d=$((d + 1))
+            done
+            printf "\033[%dA" "$diff"
+        fi
     done
 
     restore_terminal
