@@ -22,6 +22,11 @@ Kontext is POSIX compliant.
     kontext -f <kubeconfig_file>
     ```
 
+* `add` a context to your existing kubeconfig
+    ```
+    kontext -a <new_context_file_path>
+    ```
+
 * `delete` a context and its associated cluster/user
     ```
     kontext -d <context_name>
