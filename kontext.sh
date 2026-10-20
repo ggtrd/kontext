@@ -343,6 +343,80 @@ use_context() {
 }
 
 
+# Add context to a given kubeconfig file
+# Usage: add_context <context_file_path_to_add> <kubeconfig_path>
+add_context() {
+    local kubeconfig_new="$1"
+    local kubeconfig_original="$2"
+    local kubeconfig_tmp="$DIR_TMP/kubeconfig.tmp"
+
+    if [ ! -f "$kubeconfig_new" ]; then
+        echo "error: file '$kubeconfig_new' not found"
+        exit 1
+    fi
+
+    if [ ! -f "$kubeconfig_original" ]; then
+        echo "error: kubeconfig file not found."
+        echo "tips: ensure either $HOME/.kube/config or environment variable \$KUBECONFIG exists"
+        exit 1
+    fi
+
+    local cluster_name="$(kubectl config view --kubeconfig="$kubeconfig_new" -o jsonpath='{.clusters[0].name}')"
+    echo "using cluster name '$cluster_name' found in $kubeconfig_new as the context name..."
+
+    # Rename existing username & context to avoid conflicts between all the contexts due to defaults values
+    sed -i "/user: ./ s/\(user:\).*/\1 $cluster_name/" $kubeconfig_new
+    sed -i "/cluster: ./ s/\(cluster:\).*/\1 $cluster_name/" $kubeconfig_new
+    sed -i "/name: ./ s/\(name:\).*/\1 $cluster_name/" $kubeconfig_new
+
+    # Backup the current kubeconfig
+    if [ -f "$kubeconfig_original" ]; then
+        cp $kubeconfig_original "$kubeconfig_original.save.$(date +%Y%m%d%H%M%S)"
+    fi
+
+    # Delete old context/cluster/user if it was already existing with same name
+    export KUBECONFIG="$kubeconfig_original"
+    if [ "$(kubectl config get-users | grep -x $cluster_name)" ]; then
+        kubectl config delete-user $cluster_name
+    fi
+    if [ "$(kubectl config get-clusters | grep -x $cluster_name)" ]; then
+        kubectl config delete-cluster $cluster_name
+    fi
+    if [ "$(kubectl config get-contexts | grep -x $cluster_name)" ]; then
+        kubectl config delete-context $cluster_name
+    fi
+
+    # Merge the 2 files
+    # KUBECONFIG accept a list of files separated with ':'
+    export KUBECONFIG="$kubeconfig_original":"$kubeconfig_new"
+    kubectl config view --flatten > $kubeconfig_tmp
+
+    # Replace original file with the tmp file
+    mv $kubeconfig_tmp $kubeconfig_original
+    chmod 600 $kubeconfig_original
+
+
+    if [ -z "$(kubectl config get-contexts -o name | grep -x $cluster_name)" ]; then
+        local error_flag='true'
+        echo "error: context '$cluster_name' not added"
+    fi
+
+    if [ -z "$(kubectl config get-users | grep -x $cluster_name)" ]; then
+        local error_flag='true'
+        echo "error: user '$cluster_name' not added"
+    fi
+
+    if [ -z "$(kubectl config get-clusters | grep -x $cluster_name)" ]; then
+        local error_flag='true'
+        echo "error: cluster '$cluster_name' not added"
+    fi
+
+    if [ "$(echo $error_flag)" != 'true' ]; then
+        echo "Success! Context '$cluster_name' has been added in $kubeconfig_original"
+    fi
+}
+
+
 # Delete context and associated user & cluster in given kubeconfig file
 # Usage: delete_context <context_name>
 delete_context() {
@@ -533,6 +607,7 @@ case "$1" in
     echo "  $(get_cli_name)                                       Select kube contexts from current kubeconfig."
     echo "  $(get_cli_name) <kubeconfig_file_path>                Same as -f, --file."
     echo "  $(get_cli_name) -f, --file <kubeconfig_file_path>     Select kube contexts from given kubeconfig file. Cannot works if KUBECONFIG env var exists."
+    echo "  $(get_cli_name) -a, --add <new_context_file_path>     Add the context contained in the provided file to the current kubeconfig file."
     echo "  $(get_cli_name) -d, --delete <context>                Delete the given context and its associated cluster/user."
     echo "  $(get_cli_name) -h, --help                            Display this message."
     echo "  $(get_cli_name) -v, --version                         Get current version of $(get_cli_name)."
@@ -545,6 +620,15 @@ case "$1" in
     cli_update_notification
     kubeconfig_path="$(get_kubeconfig_best_path $2)"
     run_menu $kubeconfig_path
+    ;;
+
+  -a|--add|add)
+    if [ -z "$2" ]; then
+        echo 'error: missing new context file path\n--help for more informations'
+        exit
+    fi
+    kubeconfig_path="$(get_kubeconfig_best_path)"
+    add_context "$2" $kubeconfig_path
     ;;
 
   -d|--delete|delete)
