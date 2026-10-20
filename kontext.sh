@@ -348,7 +348,8 @@ use_context() {
 add_context() {
     local kubeconfig_new="$1"
     local kubeconfig_original="$2"
-    local kubeconfig_tmp="$DIR_TMP/kubeconfig.tmp"
+    local kubeconfig_tmp1="$DIR_TMP/kubeconfig1.tmp"
+    local kubeconfig_tmp2="$DIR_TMP/kubeconfig2.tmp"
 
     if [ ! -f "$kubeconfig_new" ]; then
         echo "error: file '$kubeconfig_new' not found"
@@ -361,40 +362,56 @@ add_context() {
         exit 1
     fi
 
-    local cluster_name="$(kubectl config view --kubeconfig="$kubeconfig_new" -o jsonpath='{.clusters[0].name}')"
-    echo "using cluster name '$cluster_name' found in $kubeconfig_new as the context name..."
-
-    # Rename existing username & context to avoid conflicts between all the contexts due to defaults values
-    sed -i "/user: ./ s/\(user:\).*/\1 $cluster_name/" $kubeconfig_new
-    sed -i "/cluster: ./ s/\(cluster:\).*/\1 $cluster_name/" $kubeconfig_new
-    sed -i "/name: ./ s/\(name:\).*/\1 $cluster_name/" $kubeconfig_new
+    # Allow merge file only if contains 1 context (to avoid string manipulation below overwriting too large infos)
+    local context_quantity="$(kubectl config view --kubeconfig=$kubeconfig_new -o jsonpath='{.contexts[*].name}' | wc -w)"
+    local cluster_quantity="$(kubectl config view --kubeconfig=$kubeconfig_new -o jsonpath='{.clusters[*].name}' | wc -w)"
+    local user_quantity="$(kubectl config view --kubeconfig=$kubeconfig_new -o jsonpath='{.users[*].name}' | wc -w)"
+    if [ "$context_quantity" != 1 ] || [ "$cluster_quantity" != 1 ] || [ "$user_quantity" != 1 ]; then
+        echo "error: can merge file if contains only 1 context ($context_quantity found), 1 cluster ($cluster_quantity found) and 1 user ($user_quantity found)"
+        exit 1
+    fi
 
     # Backup the current kubeconfig
     if [ -f "$kubeconfig_original" ]; then
         cp $kubeconfig_original "$kubeconfig_original.save.$(date +%Y%m%d%H%M%S)"
     fi
 
-    # Delete old context/cluster/user if it was already existing with same name
-    export KUBECONFIG="$kubeconfig_original"
-    if [ "$(kubectl config get-users | grep -x $cluster_name)" ]; then
-        kubectl config delete-user $cluster_name
-    fi
-    if [ "$(kubectl config get-clusters | grep -x $cluster_name)" ]; then
-        kubectl config delete-cluster $cluster_name
-    fi
-    if [ "$(kubectl config get-contexts | grep -x $cluster_name)" ]; then
-        kubectl config delete-context $cluster_name
-    fi
+    # Copy user file in tmp file, because we need to modify it
+    cp $kubeconfig_new $kubeconfig_tmp1
+
+    # Sanitize context informations
+    local cluster_name="$(kubectl config view --kubeconfig="$kubeconfig_tmp1" -o jsonpath='{.clusters[0].name}')"
+    echo "using cluster name '$cluster_name' as context/cluster/user names..."
+
+    # Rename existing username & context to avoid conflicts between all the contexts due to defaults values
+    sed -i "/user: ./ s/\(user:\).*/\1 $cluster_name/" $kubeconfig_tmp1
+    sed -i "/cluster: ./ s/\(cluster:\).*/\1 $cluster_name/" $kubeconfig_tmp1
+    sed -i "/name: ./ s/\(name:\).*/\1 $cluster_name/" $kubeconfig_tmp1
 
     # Merge the 2 files
     # KUBECONFIG accept a list of files separated with ':'
-    export KUBECONFIG="$kubeconfig_original":"$kubeconfig_new"
-    kubectl config view --flatten > $kubeconfig_tmp
+    KUBECONFIG="$kubeconfig_original":"$kubeconfig_tmp1" kubectl config view --flatten > $kubeconfig_tmp2
+
+    # Ensure new kubeconfig is not an empty file that will replace existing kubeconfig
+    if [ -z "$(cat $kubeconfig_tmp2)" ]; then
+        echo "error: new kubeconfig file is empty, aborting."
+        exit 1
+    fi
+
+    # Delete old context/cluster/user if it was already existing with same name
+    if [ "$(kubectl config get-users --kubeconfig="$kubeconfig_original" | grep -x $cluster_name)" ]; then
+        kubectl config delete-user --kubeconfig="$kubeconfig_original" $cluster_name
+    fi
+    if [ "$(kubectl config get-clusters --kubeconfig="$kubeconfig_original" | grep -x $cluster_name)" ]; then
+        kubectl config delete-cluster --kubeconfig="$kubeconfig_original" $cluster_name
+    fi
+    if [ "$(kubectl config get-contexts --kubeconfig="$kubeconfig_original" | grep -x $cluster_name)" ]; then
+        kubectl config delete-context --kubeconfig="$kubeconfig_original" $cluster_name
+    fi
 
     # Replace original file with the tmp file
-    mv $kubeconfig_tmp $kubeconfig_original
+    mv $kubeconfig_tmp2 $kubeconfig_original
     chmod 600 $kubeconfig_original
-
 
     if [ -z "$(kubectl config get-contexts -o name | grep -x $cluster_name)" ]; then
         local error_flag='true'
@@ -412,7 +429,11 @@ add_context() {
     fi
 
     if [ "$(echo $error_flag)" != 'true' ]; then
-        echo "Success! Context '$cluster_name' has been added in $kubeconfig_original"
+        printf '\nSuccess! New context added:\n'
+        printf "  kubeconfig: $FG_BLUE$kubeconfig_original$NO_FORMAT\n"
+        printf "  context:    $FG_BLUE$cluster_name$NO_FORMAT\n"
+        printf "  cluster:    $FG_BLUE$cluster_name$NO_FORMAT\n"
+        printf "  user:       $FG_BLUE$cluster_name$NO_FORMAT\n\n"
     fi
 }
 
