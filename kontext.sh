@@ -28,6 +28,9 @@
 # Keyboard keys
 ARROW_UP="$(printf '\033[A')"
 ARROW_DOWN="$(printf '\033[B')"
+# KEY_SLASH="$(printf '\033[47')"
+KEY_SLASH='/'
+KEY_COLON=':'
 
 # Mouse (only begin of pattern because the cursor position coordinates are part of it)
 SCROLL_UP_PATTERN="$(printf '\033[<64;')*"
@@ -35,8 +38,13 @@ SCROLL_DOWN_PATTERN="$(printf '\033[<65;')*"
 MIDDLE_CLICK_PATTERN="$(printf '\033[<1;')*M"
 # LEFT_CLICK_PATTERN="$(printf '\033[<0;')*M"
 # RIGHT_CLICK_PATTERN="$(printf '\033[<2;')*M"
+ENABLE_MOUSE="$(printf '\e[?1000h\e[?1006h')"
+DISABLE_MOUSE="$(printf '\e[?1000l\e[?1006l')"
 
 LINE_OVERRIDER='\033[2K'
+
+# '$d' is waiting for a quantity of line to up: print $CURSOR_UPPER '<int>'
+CURSOR_UPPER='\033[%dA'
 
 # Colors
 NO_FORMAT='\033[0m'
@@ -192,7 +200,7 @@ menu() {
         printf "\033[?25l"
 
         # Enable mouse scroll
-        printf "\e[?1000h\e[?1006h"
+        printf "$ENABLE_MOUSE"
     }
 
     restore_terminal() {
@@ -203,7 +211,117 @@ menu() {
         printf "\033[?25h"
 
         # Disable mouse scroll
-        printf "\e[?1000l\e[?1006l"
+        printf "$DISABLE_MOUSE"
+    }
+
+    search_item() {
+        local original_options="$1"
+        local query=""
+        local char=""
+
+        # Disable mouse tracking to avoid unwanted char in search query
+        printf "$DISABLE_MOUSE"
+
+        while true; do
+            # Filter options based on query
+            if [ -n "$query" ]; then
+                local filtered=""
+                for opt in $original_options; do
+                    case "$opt" in
+                        *"$query"*) filtered="$filtered $opt" ;;
+                    esac
+                done
+                options="$filtered $option_exit"
+            else
+                options="$original_options $option_exit"
+            fi
+
+            total=$(echo $options | wc -w)
+
+            # Adjust 'current' if the filtered list is smaller than the current selection
+            if [ "$current" -gt "$total" ]; then
+                current=$total
+            fi
+
+            # Move back to the top (including the search line)
+            local last_lines=$lines_printed
+            if [ "$last_lines" -gt 0 ]; then
+                printf "$CURSOR_UPPER" "$last_lines"
+            fi
+
+            # Display searchbar
+            printf "$LINE_OVERRIDER    search:$FG_SELECTED %s█$NO_FORMAT\n" "$query"
+
+            # Ensure menu is well displayed
+            print_menu
+
+            # Add +1 to lines_printed to include the search line in the total
+            lines_printed=$((lines_printed + 1))
+
+            # Clear trailing lines if the menu has shrunk
+            if [ "$last_lines" -gt "$lines_printed" ]; then
+                local diff=$((last_lines - lines_printed))
+                local d=0
+                while [ "$d" -lt "$diff" ]; do
+                    printf "$LINE_OVERRIDER\n"
+                    d=$((d + 1))
+                done
+                printf "$CURSOR_UPPER" "$diff"
+            fi
+
+            # Read 1 char
+            char="$(dd bs=1 count=1 2>/dev/null)"
+
+            # "Enter" key
+            if [ -z "$char" ] || [ "$char" = "$(printf '\n')" ] || [ "$char" = "$(printf '\r')" ]; then
+                break
+            fi
+
+            # Escape / Arrows (ANSI sequences)
+            if [ "$char" = "$(printf '\033')" ]; then
+                stty min 0 time 1
+                local seq="$(dd bs=2 count=1 2>/dev/null)"
+                stty -echo -icanon min 1 time 0
+
+                case "$char$seq" in
+                    "$ARROW_UP")   [ "$current" -gt 1 ] && current=$((current - 1)) ;;
+                    "$ARROW_DOWN") [ "$current" -lt "$total" ] && current=$((current + 1)) ;;
+                    "$char")
+                        # Esc key only: reset menu and exit search
+                        options="$original_options $option_exit"
+                        total=$(echo $options | wc -w)
+                        current=1
+
+                        if [ "$lines_printed" -gt 0 ]; then
+                            printf "$CURSOR_UPPER" "$lines_printed"
+                            local d=0
+                            while [ "$d" -lt "$lines_printed" ]; do
+                                printf "$LINE_OVERRIDER\n"
+                                d=$((d + 1))
+                            done
+                            printf "$CURSOR_UPPER" "$lines_printed"
+                        fi
+
+                        lines_printed=0
+                        printf "$ENABLE_MOUSE"
+                        return
+                        ;;
+                esac
+                continue
+            fi
+
+            # Backspace
+            if [ "$char" = "$(printf '\177')" ] || [ "$char" = "$(printf '\b')" ]; then
+                query="${query%?}"
+                current=1
+            else
+                query="$query$char"
+                current=1
+            fi
+        done
+
+        # Enable back mouse tracking
+        printf "$ENABLE_MOUSE"
     }
 
     # Enable CTRL+C
@@ -228,6 +346,7 @@ menu() {
             $MIDDLE_CLICK_PATTERN)  break ;;    # Select item from list with mouse middle click
             # $LEFT_CLICK_PATTERN)    break ;;    # Select item from list with mouse left click
             # $RIGHT_CLICK_PATTERN)   break ;;    # Select item from list with mouse right click
+            "$KEY_SLASH"|"$KEY_COLON") search_item "$1" ;;
             "")                     break ;;    # Select item from list with Enter
         esac
 
@@ -236,7 +355,7 @@ menu() {
 
         # Move back up to the top of the previous menu
         if [ "$last_lines" -gt 0 ]; then
-            printf "\033[%dA" "$last_lines"
+            printf "$CURSOR_UPPER" "$last_lines"
         fi
 
         print_menu
@@ -249,7 +368,7 @@ menu() {
                 printf "$LINE_OVERRIDER\n"
                 d=$((d + 1))
             done
-            printf "\033[%dA" "$diff"
+            printf "$CURSOR_UPPER" "$diff"
         fi
     done
 

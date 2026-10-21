@@ -32,6 +32,14 @@ Kontext is POSIX compliant.
     kontext -d <context_name>
     ```
 
+* `search` a context while browsing list with `:` or `/`
+    > More or less like the [k9s](https://k9scli.io/) search field
+    ```
+    kontext
+    ```
+    * either press `:` or `/` to start searching for a context
+    * press `esc` to leave
+
 * display help
     ```
     kontext --help
