@@ -40,7 +40,7 @@ done
 REPO_URL="https://github.com/$REPO"
 MAIN_NAME="$(echo $REPO | cut -d/ -f2)"
 
-LATEST_TAG="$(git ls-remote --tags $REPO_URL | sed 's|.*tags/\(.*\)|\1|' | tail -n 1)"
+LATEST_TAG="$(git ls-remote --sort version:refname --tags $REPO_URL | sed 's|.*tags/\(.*\)|\1|' | tail -n 1)"
 ARTIFACT_URL="https://github.com/$REPO/archive/refs/tags/$LATEST_TAG.zip"
 
 INSTALL_DIR="$HOME/.local/bin"
